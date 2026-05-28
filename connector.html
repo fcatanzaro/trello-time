@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Time Tracker – Connector</title>
+</head>
+<body>
+<script src="https://p.trellocdn.com/power-up.min.js"></script>
+<script>
+  /* ── helpers ─────────────────────────────────────────── */
+  function formatTime(totalMinutes) {
+    if (!totalMinutes) return null;
+    var h = Math.floor(totalMinutes / 60);
+    var m = totalMinutes % 60;
+    if (h > 0 && m > 0) return h + 'h ' + m + 'm';
+    if (h > 0) return h + 'h';
+    return m + 'm';
+  }
+
+  /* ── Power-Up init ────────────────────────────────────── */
+  TrelloPowerUp.initialize({
+
+    /* Small badge shown on the card front */
+    'card-badges': function(t) {
+      return t.get('card', 'shared', 'timeSpent', null)
+        .then(function(timeSpent) {
+          if (!timeSpent) return [];
+          return [{
+            text: '⏱ ' + formatTime(timeSpent),
+            color: 'blue'
+          }];
+        });
+    },
+
+    /* Larger badge shown on the card back */
+    'card-detail-badges': function(t) {
+      return t.get('card', 'shared', 'timeSpent', null)
+        .then(function(timeSpent) {
+          return [{
+            title: 'Time Spent',
+            text: timeSpent ? formatTime(timeSpent) : 'Not set',
+            callback: function(t) {
+              return t.popup({
+                title: 'Log Time Spent',
+                url:   './time-modal.html',
+                height: 230
+              });
+            }
+          }];
+        });
+    },
+
+    /* Button in the card back sidebar */
+    'card-buttons': function(t) {
+      return [{
+        text: 'Log Time',
+        callback: function(t) {
+          return t.popup({
+            title: 'Log Time Spent',
+            url:   './time-modal.html',
+            height: 230
+          });
+        }
+      }];
+    }
+
+  }, { appKey: 'YOUR_APP_KEY', appName: 'Time Tracker' });
+</script>
+</body>
+</html>

@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Log Time</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #ffffff;
+      color: #172b4d;
+      padding: 16px;
+    }
+
+    .current-time {
+      font-size: 12px;
+      color: #5e6c84;
+      margin-bottom: 14px;
+    }
+
+    .current-time span {
+      font-weight: 600;
+      color: #0052cc;
+    }
+
+    .inputs {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .field {
+      flex: 1;
+    }
+
+    label {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #5e6c84;
+      margin-bottom: 5px;
+    }
+
+    input[type="number"] {
+      width: 100%;
+      padding: 8px 10px;
+      border: 2px solid #dfe1e6;
+      border-radius: 6px;
+      font-size: 20px;
+      font-weight: 600;
+      color: #172b4d;
+      text-align: center;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    input[type="number"]:focus {
+      border-color: #0052cc;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    button {
+      flex: 1;
+      padding: 9px 12px;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, opacity 0.15s;
+    }
+
+    button:hover { opacity: 0.88; }
+
+    #btn-save {
+      background: #0052cc;
+      color: #ffffff;
+    }
+
+    #btn-clear {
+      background: #f4f5f7;
+      color: #5e6c84;
+    }
+
+    .error {
+      display: none;
+      font-size: 11px;
+      color: #de350b;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+
+  <p class="current-time">Currently logged: <span id="current-display">—</span></p>
+
+  <div class="inputs">
+    <div class="field">
+      <label for="hours">Hours</label>
+      <input type="number" id="hours" min="0" max="999" value="0" placeholder="0">
+    </div>
+    <div class="field">
+      <label for="minutes">Minutes</label>
+      <input type="number" id="minutes" min="0" max="59" value="0" placeholder="0">
+    </div>
+  </div>
+
+  <div class="actions">
+    <button id="btn-save"  onclick="saveTime()">Save</button>
+    <button id="btn-clear" onclick="clearTime()">Clear</button>
+  </div>
+
+  <p class="error" id="error-msg">Minutes must be between 0 and 59.</p>
+
+<script src="https://p.trellocdn.com/power-up.min.js"></script>
+<script>
+  var t = TrelloPowerUp.iframe();
+
+  /* ── Load existing value ──────────────────────────────── */
+  t.get('card', 'shared', 'timeSpent', null).then(function(timeSpent) {
+    var display = document.getElementById('current-display');
+    if (timeSpent) {
+      var h = Math.floor(timeSpent / 60);
+      var m = timeSpent % 60;
+      display.textContent = (h ? h + 'h ' : '') + m + 'm';
+      document.getElementById('hours').value   = h;
+      document.getElementById('minutes').value = m;
+    } else {
+      display.textContent = 'None';
+    }
+  });
+
+  /* ── Save ─────────────────────────────────────────────── */
+  function saveTime() {
+    var hours   = parseInt(document.getElementById('hours').value,   10) || 0;
+    var minutes = parseInt(document.getElementById('minutes').value, 10) || 0;
+    var errMsg  = document.getElementById('error-msg');
+
+    if (minutes < 0 || minutes > 59) {
+      errMsg.style.display = 'block';
+      return;
+    }
+    errMsg.style.display = 'none';
+
+    var totalMinutes = hours * 60 + minutes;
+    t.set('card', 'shared', 'timeSpent', totalMinutes)
+      .then(function() { t.closePopup(); });
+  }
+
+  /* ── Clear ────────────────────────────────────────────── */
+  function clearTime() {
+    t.remove('card', 'shared', 'timeSpent')
+      .then(function() { t.closePopup(); });
+  }
+</script>
+</body>
+</html>
