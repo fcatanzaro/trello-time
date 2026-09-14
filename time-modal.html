@@ -27,11 +27,15 @@
     .inputs {
       display: flex;
       gap: 10px;
-      margin-bottom: 14px;
+      margin-bottom: 10px;
     }
 
     .field {
       flex: 1;
+    }
+
+    .field-note {
+      margin-bottom: 14px;
     }
 
     label {
@@ -44,20 +48,30 @@
       margin-bottom: 5px;
     }
 
-    input[type="number"] {
+    input[type="number"],
+    input[type="text"] {
       width: 100%;
       padding: 8px 10px;
       border: 2px solid #dfe1e6;
       border-radius: 6px;
-      font-size: 20px;
-      font-weight: 600;
       color: #172b4d;
-      text-align: center;
       outline: none;
       transition: border-color 0.15s;
     }
 
-    input[type="number"]:focus {
+    input[type="number"] {
+      font-size: 20px;
+      font-weight: 600;
+      text-align: center;
+    }
+
+    input[type="text"] {
+      font-size: 13px;
+      font-family: inherit;
+    }
+
+    input[type="number"]:focus,
+    input[type="text"]:focus {
       border-color: #0052cc;
     }
 
@@ -84,81 +98,282 @@
       color: #ffffff;
     }
 
-    #btn-clear {
-      background: #f4f5f7;
-      color: #5e6c84;
-    }
-
     .error {
       display: none;
       font-size: 11px;
       color: #de350b;
       margin-top: 8px;
     }
+
+    .entries-heading {
+      margin-top: 18px;
+      padding-top: 12px;
+      border-top: 1px solid #dfe1e6;
+    }
+
+    .empty {
+      font-size: 12px;
+      color: #5e6c84;
+    }
+
+    .entries {
+      list-style: none;
+    }
+
+    .entry {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 8px 0;
+      border-bottom: 1px solid #f4f5f7;
+    }
+
+    .entry:last-child { border-bottom: none; }
+
+    .entry-body {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .entry-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 12px;
+    }
+
+    .entry-duration {
+      font-weight: 600;
+      color: #0052cc;
+    }
+
+    .entry-date {
+      color: #5e6c84;
+      white-space: nowrap;
+    }
+
+    .entry-note {
+      font-size: 13px;
+      margin-top: 2px;
+      overflow-wrap: anywhere;
+    }
+
+    .entry-delete {
+      flex: 0 0 auto;
+      width: 24px;
+      height: 24px;
+      padding: 0;
+      background: transparent;
+      color: #5e6c84;
+      font-size: 16px;
+      line-height: 24px;
+    }
+
+    .entry-delete:hover {
+      background: #f4f5f7;
+      color: #de350b;
+      opacity: 1;
+    }
   </style>
 </head>
 <body>
 
-  <p class="current-time">Currently logged: <span id="current-display">—</span></p>
+  <p class="current-time">Total logged: <span id="current-display">—</span></p>
 
-  <div class="inputs">
-    <div class="field">
-      <label for="hours">Hours</label>
-      <input type="number" id="hours" min="0" max="999" value="0" placeholder="0">
+  <form id="entry-form">
+    <div class="inputs">
+      <div class="field">
+        <label for="hours">Hours</label>
+        <input type="number" id="hours" min="0" max="999" value="0" placeholder="0">
+      </div>
+      <div class="field">
+        <label for="minutes">Minutes</label>
+        <input type="number" id="minutes" min="0" max="59" value="0" placeholder="0">
+      </div>
     </div>
-    <div class="field">
-      <label for="minutes">Minutes</label>
-      <input type="number" id="minutes" min="0" max="59" value="0" placeholder="0">
+
+    <div class="field-note">
+      <label for="note">Note</label>
+      <input type="text" id="note" maxlength="150" placeholder="What did you work on?">
     </div>
-  </div>
 
-  <div class="actions">
-    <button id="btn-save"  onclick="saveTime()">Save</button>
-    <button id="btn-clear" onclick="clearTime()">Clear</button>
-  </div>
+    <div class="actions">
+      <button id="btn-save" type="submit">Add Entry</button>
+    </div>
 
-  <p class="error" id="error-msg">Minutes must be between 0 and 59.</p>
+    <p class="error" id="error-msg"></p>
+  </form>
+
+  <label class="entries-heading">Entries</label>
+  <p class="empty" id="empty-msg">No time logged yet.</p>
+  <ul class="entries" id="entries"></ul>
 
 <script src="https://p.trellocdn.com/power-up.min.js"></script>
 <script>
   var t = TrelloPowerUp.iframe();
 
-  /* ── Load existing value ──────────────────────────────── */
-  t.get('card', 'shared', 'timeSpent', null).then(function(timeSpent) {
-    var display = document.getElementById('current-display');
-    if (timeSpent) {
-      var h = Math.floor(timeSpent / 60);
-      var m = timeSpent % 60;
-      display.textContent = (h ? h + 'h ' : '') + m + 'm';
-      document.getElementById('hours').value   = h;
-      document.getElementById('minutes').value = m;
-    } else {
-      display.textContent = 'None';
-    }
-  });
+  /*
+   * Entries are stored under card/shared/timeEntries as
+   *   [{ d: <timestamp ms, 0 if unknown>, m: <minutes>, n: <note> }, ...]
+   * Keys are kept short because Trello limits card/shared data to 4096 chars.
+   */
 
-  /* ── Save ─────────────────────────────────────────────── */
-  function saveTime() {
+  /* ── helpers ─────────────────────────────────────────── */
+  function formatTime(totalMinutes) {
+    var h = Math.floor(totalMinutes / 60);
+    var m = totalMinutes % 60;
+    if (h > 0 && m > 0) return h + 'h ' + m + 'm';
+    if (h > 0) return h + 'h';
+    return m + 'm';
+  }
+
+  function formatDate(ms) {
+    if (!ms) return 'Earlier';
+    return new Date(ms).toLocaleString(undefined, {
+      month: 'short', day: 'numeric', year: 'numeric',
+      hour: 'numeric', minute: '2-digit'
+    });
+  }
+
+  function showError(msg) {
+    var errMsg = document.getElementById('error-msg');
+    errMsg.textContent = msg;
+    errMsg.style.display = msg ? 'block' : 'none';
+    t.sizeTo(document.body);
+  }
+
+  /* Reads entries, converting a legacy single timeSpent value into one entry */
+  function loadEntries() {
+    return t.get('card', 'shared').then(function(data) {
+      data = data || {};
+      if (Array.isArray(data.timeEntries)) return data.timeEntries;
+      if (data.timeSpent) return [{ d: 0, m: data.timeSpent, n: '' }];
+      return [];
+    });
+  }
+
+  function saveEntries(entries) {
+    var write = entries.length
+      ? t.set('card', 'shared', 'timeEntries', entries)
+      : t.remove('card', 'shared', 'timeEntries');
+    return write.then(function() {
+      // Legacy value has been folded into timeEntries
+      return t.remove('card', 'shared', 'timeSpent');
+    });
+  }
+
+  /* ── Render ───────────────────────────────────────────── */
+  function render(entries) {
+    var total = entries.reduce(function(sum, e) { return sum + e.m; }, 0);
+    document.getElementById('current-display').textContent =
+      total ? formatTime(total) : 'None';
+
+    var list = document.getElementById('entries');
+    list.innerHTML = '';
+    document.getElementById('empty-msg').style.display = entries.length ? 'none' : 'block';
+
+    // Newest first, keeping each entry's index in storage for deletion
+    entries
+      .map(function(e, i) { return { entry: e, index: i }; })
+      .sort(function(a, b) { return b.entry.d - a.entry.d; })
+      .forEach(function(item) {
+        var e = item.entry;
+        var li = document.createElement('li');
+        li.className = 'entry';
+
+        var body = document.createElement('div');
+        body.className = 'entry-body';
+
+        var top = document.createElement('div');
+        top.className = 'entry-top';
+        var duration = document.createElement('span');
+        duration.className = 'entry-duration';
+        duration.textContent = formatTime(e.m);
+        var date = document.createElement('span');
+        date.className = 'entry-date';
+        date.textContent = formatDate(e.d);
+        top.appendChild(duration);
+        top.appendChild(date);
+        body.appendChild(top);
+
+        if (e.n) {
+          var note = document.createElement('div');
+          note.className = 'entry-note';
+          note.textContent = e.n;
+          body.appendChild(note);
+        }
+
+        var del = document.createElement('button');
+        del.className = 'entry-delete';
+        del.type = 'button';
+        del.title = 'Delete entry';
+        del.textContent = '×';
+        del.onclick = function() { deleteEntry(item.index, e); };
+
+        li.appendChild(body);
+        li.appendChild(del);
+        list.appendChild(li);
+      });
+
+    t.sizeTo(document.body);
+  }
+
+  function refresh() {
+    return loadEntries().then(render);
+  }
+
+  /* ── Add ──────────────────────────────────────────────── */
+  document.getElementById('entry-form').onsubmit = function(ev) {
+    ev.preventDefault();
+
     var hours   = parseInt(document.getElementById('hours').value,   10) || 0;
     var minutes = parseInt(document.getElementById('minutes').value, 10) || 0;
-    var errMsg  = document.getElementById('error-msg');
+    var note    = document.getElementById('note').value.trim().slice(0, 150);
 
-    if (minutes < 0 || minutes > 59) {
-      errMsg.style.display = 'block';
-      return;
-    }
-    errMsg.style.display = 'none';
+    if (minutes < 0 || minutes > 59) return showError('Minutes must be between 0 and 59.');
+    if (hours < 0) return showError('Hours cannot be negative.');
+    if (hours * 60 + minutes === 0) return showError('Enter some time to log.');
+    showError('');
 
-    var totalMinutes = hours * 60 + minutes;
-    t.set('card', 'shared', 'timeSpent', totalMinutes)
-      .then(function() { t.closePopup(); });
+    var entry = { d: Date.now(), m: hours * 60 + minutes, n: note };
+
+    // Re-read before writing so entries added elsewhere aren't overwritten
+    loadEntries()
+      .then(function(entries) {
+        entries.push(entry);
+        return saveEntries(entries).then(function() { return entries; });
+      })
+      .then(function(entries) {
+        document.getElementById('hours').value   = 0;
+        document.getElementById('minutes').value = 0;
+        document.getElementById('note').value    = '';
+        render(entries);
+      })
+      .catch(function() {
+        showError('Could not save. This card may have reached Trello\'s storage limit — try a shorter note or delete old entries.');
+      });
+  };
+
+  /* ── Delete ───────────────────────────────────────────── */
+  function deleteEntry(index, entry) {
+    loadEntries()
+      .then(function(entries) {
+        // Match on content in case the list changed since it was rendered
+        var target = entries[index];
+        if (!target || target.d !== entry.d || target.m !== entry.m || target.n !== entry.n) {
+          index = entries.findIndex(function(e) {
+            return e.d === entry.d && e.m === entry.m && e.n === entry.n;
+          });
+        }
+        if (index === -1) return entries;
+        entries.splice(index, 1);
+        return saveEntries(entries).then(function() { return entries; });
+      })
+      .then(render)
+      .catch(function() { showError('Could not delete entry.'); });
   }
 
-  /* ── Clear ────────────────────────────────────────────── */
-  function clearTime() {
-    t.remove('card', 'shared', 'timeSpent')
-      .then(function() { t.closePopup(); });
-  }
+  refresh();
 </script>
 </body>
 </html>

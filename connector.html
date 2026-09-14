@@ -17,12 +17,31 @@
     return m + 'm';
   }
 
+  /* Sum of all entries, falling back to the legacy single timeSpent value */
+  function getTotalMinutes(t) {
+    return t.get('card', 'shared').then(function(data) {
+      data = data || {};
+      if (Array.isArray(data.timeEntries)) {
+        return data.timeEntries.reduce(function(sum, e) { return sum + e.m; }, 0);
+      }
+      return data.timeSpent || 0;
+    });
+  }
+
+  function openTimePopup(t) {
+    return t.popup({
+      title: 'Log Time Spent',
+      url:   './time-modal.html',
+      height: 360
+    });
+  }
+
   /* ── Power-Up init ────────────────────────────────────── */
   TrelloPowerUp.initialize({
 
     /* Small badge shown on the card front */
     'card-badges': function(t) {
-      return t.get('card', 'shared', 'timeSpent', null)
+      return getTotalMinutes(t)
         .then(function(timeSpent) {
           if (!timeSpent) return [];
           return [{
@@ -34,18 +53,12 @@
 
     /* Larger badge shown on the card back */
     'card-detail-badges': function(t) {
-      return t.get('card', 'shared', 'timeSpent', null)
+      return getTotalMinutes(t)
         .then(function(timeSpent) {
           return [{
             title: 'Time Spent',
             text: timeSpent ? formatTime(timeSpent) : 'Not set',
-            callback: function(t) {
-              return t.popup({
-                title: 'Log Time Spent',
-                url:   './time-modal.html',
-                height: 230
-              });
-            }
+            callback: openTimePopup
           }];
         });
     },
@@ -54,13 +67,7 @@
     'card-buttons': function(t) {
       return [{
         text: 'Log Time',
-        callback: function(t) {
-          return t.popup({
-            title: 'Log Time Spent',
-            url:   './time-modal.html',
-            height: 230
-          });
-        }
+        callback: openTimePopup
       }];
     }
 
